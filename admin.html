@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DP Администрация</title>
+    <title>DP Панель управления</title>
     <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@300;400&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <style>
@@ -56,8 +56,8 @@
 
     <div id="dashboard-section" class="admin-container" style="display:none;">
         <div class="tabs">
-            <button class="tab-btn active" onclick="switchTab('tfp')">TFP Заявки</button>
-            <button class="tab-btn" onclick="switchTab('services')">Платные Услуги</button>
+            <button class="tab-btn active" onclick="switchTab('tfp')">Заявки TFP</button>
+            <button class="tab-btn" onclick="switchTab('services')">Платные услуги</button>
         </div>
 
         <div id="tfp-tab" class="tab-content active">
@@ -72,9 +72,9 @@
     <div id="email-modal" class="modal-overlay">
         <div class="modal-content">
             <h2 style="font-family: var(--font-heading); margin-bottom: 10px; font-size: 1.8rem; font-weight: 300; letter-spacing: 3px;">Редактировать письмо</h2>
-            <p style="font-family: var(--font-body); margin-bottom: 30px; opacity: 0.8;">Здесь вы можете изменить текст, добавить промокод или личное сообщение перед отправкой письма клиенту.</p>
+            <p style="font-family: var(--font-body); margin-bottom: 30px; opacity: 0.8;">Здесь вы можете изменить текст, добавить промокод или личное сообщение перед отправкой клиенту.</p>
             
-            <label class="field-label">Тема (Subject)</label>
+            <label class="field-label">Тема письма (Subject)</label>
             <input type="text" id="modal-subject" class="admin-select" style="margin-bottom: 25px;">
             
             <label class="field-label">Содержимое письма (HTML)</label>
@@ -82,82 +82,25 @@
             
             <div class="req-actions" style="border: none; padding: 0; margin: 0; justify-content: flex-end;">
                 <button class="admin-btn-delete" onclick="closeModal()" style="border-color: transparent; color: var(--text-color);">Отмена</button>
-                <button class="admin-btn" id="modal-send-btn">Подтвердить и Отправить</button>
+                <button class="admin-btn" id="modal-send-btn">Сохранить и Отправить</button>
             </div>
         </div>
     </div>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-app.js";
-        import { getFirestore, collection, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc, addDoc } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
-        import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-auth.js";
-
-        // FIREBASE НАСТРОЙКИ
-        const firebaseConfig = {
-            apiKey: "AIzaSyBxhDy4I4HZnqOAvwWE3JyjYsuy_Tg86xE",
-            authDomain: "tfp-form.firebaseapp.com",
-            projectId: "tfp-form",
-            storageBucket: "tfp-form.firebasestorage.app",
-            messagingSenderId: "542082314917",
-            appId: "1:542082314917:web:5d3a750950a8ac4fd0d34c",
-            measurementId: "G-4VRZRBDHY2"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const auth = getAuth(app);
-        const googleProvider = new GoogleAuthProvider();
+        import { db, auth, googleProvider } from './firebase-config.js';
+        import { collection, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc, addDoc } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
+        import { signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-auth.js";
+        import { buildEmail } from './email-templates.js';
 
         const ADMIN_EMAIL = "dominikphotofficial.lt@gmail.com"; 
-
-        // ШАБЛОНЫ ПИСЕМ (Оставлены на литовском для клиентов)
-        const templates = {
-            lt: {
-                Confirmed: {
-                    subject: "DP.PORTFOLIO | TFP Fotosesija Patvirtinta",
-                    html: `<div style="font-family: sans-serif; color: #1A2B2B;"><h2>Sveiki, {{name}}!</h2><p>Jūsų TFP fotosesija patvirtinta.</p><p>Data: {{date_time}}</p><p>Vieta: {{location}}</p></div>`
-                },
-                Rescheduled: {
-                    subject: "DP.PORTFOLIO | TFP Fotosesijos laikas pakeistas",
-                    html: `<div style="font-family: sans-serif; color: #1A2B2B;"><h2>Sveiki, {{name}}!</h2><p>Siūlome naują laiką fotosesijai.</p><p>Nauja data: {{date_time}}</p></div>`
-                },
-                Cancelled: {
-                    subject: "DP.PORTFOLIO | TFP Fotosesija Atšaukta",
-                    html: `<div style="font-family: sans-serif; color: #1A2B2B;"><h2>Sveiki, {{name}}!</h2><p>Apgailestaujame, bet jūsų fotosesija atšaukta.</p></div>`
-                },
-                Completed: {
-                    subject: "DP.PORTFOLIO | TFP Fotosesija Baigta",
-                    html: `<div style="font-family: sans-serif; color: #1A2B2B;"><h2>Sveiki, {{name}}!</h2><p>Ačiū už puikią fotosesiją!</p></div>`
-                },
-                ServiceStatusUpdate: {
-                    subject: "DP.PORTFOLIO | Paslaugos užsakymo atnaujinimas",
-                    html: `<div style="font-family: sans-serif; color: #1A2B2B;"><h2>Sveiki, {{name}}!</h2><p>Jūsų užsakymo ({{serviceName}}) statusas pasikeitė į: <b>{{status}}</b>.</p></div>`
-                }
-            }
-        };
-
-        function buildEmail(templateType, lang, data) {
-            const safeLang = templates[lang] ? lang : 'lt';
-            let subject = templates[safeLang][templateType]?.subject || "DP.PORTFOLIO Pranešimas";
-            let html = templates[safeLang][templateType]?.html || "<p>Sveiki, turime atnaujinimų dėl jūsų užklausos.</p>";
-            for (const key in data) {
-                const regex = new RegExp(`{{${key}}}`, 'g');
-                html = html.replace(regex, data[key] || '');
-                subject = subject.replace(regex, data[key] || '');
-            }
-            return { subject, html };
-        }
 
         const authSection = document.getElementById('auth-section');
         const dashboardSection = document.getElementById('dashboard-section');
         const logoutBtn = document.getElementById('logout-btn');
         let pendingEmailData = null;
 
-        // Обработка возврата после входа через Google
-        getRedirectResult(auth).catch((error) => {
-            console.error("Ошибка при входе:", error);
-            alert("Ошибка при входе: " + error.message);
-        });
+        getRedirectResult(auth).catch((error) => console.error("Auth Error:", error));
 
         document.getElementById('admin-login-btn').addEventListener('click', () => {
             signInWithRedirect(auth, googleProvider);
@@ -166,14 +109,14 @@
         logoutBtn.addEventListener('click', () => signOut(auth));
 
         onAuthStateChanged(auth, (user) => {
-            if (user && user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+            if (user && user.email === ADMIN_EMAIL) {
                 authSection.style.display = 'none';
                 dashboardSection.style.display = 'block';
                 logoutBtn.style.display = 'block';
                 loadTFPRequests();
                 loadServiceRequests();
             } else if (user) {
-                alert("Доступ запрещен. Вы не являетесь администратором.");
+                alert("Доступ запрещен. Вы вошли не под аккаунтом администратора.");
                 signOut(auth);
             } else {
                 authSection.style.display = 'block';
@@ -200,17 +143,15 @@
             onSnapshot(q, (snapshot) => {
                 const list = document.getElementById('tfp-list');
                 list.innerHTML = '';
-                if(snapshot.empty) {
-                    list.innerHTML = '<p style="padding: 20px; opacity: 0.7;">TFP заявок пока нет.</p>';
-                    return;
-                }
+                if(snapshot.empty) { list.innerHTML = '<p>Заявок пока нет.</p>'; return; }
+                
                 snapshot.forEach((docSnap) => {
                     const data = docSnap.data();
                     const reqDiv = document.createElement('div');
                     reqDiv.className = 'request-card';
                     reqDiv.innerHTML = `
                         <div class="req-header">
-                            <strong>${data.name} <span style="color: var(--accent-light); font-size: 0.9rem;">(${data.language ? data.language.toUpperCase() : 'LT'})</span></strong>
+                            <strong>${data.name} <span style="color: var(--accent-light); font-size: 0.9rem;">(${data.language.toUpperCase()})</span></strong>
                             <span>Статус: <strong style="color: var(--accent-light); letter-spacing: 1px;">${data.status}</strong></span>
                         </div>
                         <div class="req-body">
@@ -234,16 +175,15 @@
                             </div>
                         </div>
                         <div class="req-actions">
-                            <button class="admin-btn" onclick="prepareTFP('${docSnap.id}', '${data.language || 'lt'}', '${data.email}', '${data.name}', '${(data.idea || '').replace(/'/g, "\\'")}')">Просмотреть и Отправить письмо</button>
-                            <button class="admin-btn-outline" onclick="saveOnly('tfp_requests', '${docSnap.id}', '')">Только Сохранить</button>
+                            <button class="admin-btn" onclick="prepareTFP('${docSnap.id}', '${data.language}', '${data.email}', '${data.name}', '${data.idea.replace(/'/g, "\\'")}')">Проверить и Отправить письмо</button>
+                            <button class="admin-btn-outline" onclick="saveOnly('tfp_requests', '${docSnap.id}', '')">Только сохранить</button>
                             <button class="admin-btn-delete" onclick="deleteDocRecord('tfp_requests', '${docSnap.id}')">Удалить</button>
                         </div>
                     `;
                     list.appendChild(reqDiv);
                 });
             }, (error) => {
-                console.error("Ошибка при получении TFP:", error);
-                document.getElementById('tfp-list').innerHTML = `<p style="color: red;">Ошибка загрузки данных: ${error.message}</p>`;
+                document.getElementById('tfp-list').innerHTML = `<p style="color:red;">Ошибка доступа: ${error.message}</p>`;
             });
         }
 
@@ -252,30 +192,28 @@
             onSnapshot(q, (snapshot) => {
                 const list = document.getElementById('services-list');
                 list.innerHTML = '';
-                if(snapshot.empty) {
-                    list.innerHTML = '<p style="padding: 20px; opacity: 0.7;">Заявок на услуги пока нет.</p>';
-                    return;
-                }
+                if(snapshot.empty) { list.innerHTML = '<p>Заказов пока нет.</p>'; return; }
+
                 snapshot.forEach((docSnap) => {
                     const data = docSnap.data();
                     const reqDiv = document.createElement('div');
                     reqDiv.className = 'request-card';
                     reqDiv.innerHTML = `
                         <div class="req-header">
-                            <strong>${data.clientName} <span style="color: var(--accent-light); font-size: 0.9rem;">(${data.language ? data.language.toUpperCase() : 'LT'})</span></strong>
+                            <strong>${data.clientName} <span style="color: var(--accent-light); font-size: 0.9rem;">(${data.language.toUpperCase()})</span></strong>
                             <span>Статус: <strong style="color: var(--accent-light); letter-spacing: 1px;">${data.status}</strong></span>
                         </div>
                         <div class="req-body">
                             <div>
                                 <p><b>Услуга:</b><br>${data.serviceName}</p>
                                 <p><b>Email:</b><br>${data.email}</p>
-                                <p><b>Телефон / Соцсети:</b><br>${data.phone} / ${data.socialProfile}</p>
+                                <p><b>Телефон / Соцсеть:</b><br>${data.phone} / ${data.socialProfile}</p>
                                 <p><b>Оплата:</b><br>${data.paymentMethod}</p>
                                 <p><b>Идея / Инфо:</b><br>${data.additionalInformation}</p>
                             </div>
                             <div>
                                 <p><b>Цена:</b> ${data.finalPrice} € (Аванс: ${data.depositAmount} €)</p>
-                                <p><b>Дата:</b><br><input type="text" id="srv-dt-${docSnap.id}" value="${data.preferredDate} ${data.preferredTime || ''}" class="admin-select"></p>
+                                <p><b>Дата:</b><br><input type="text" id="srv-dt-${docSnap.id}" value="${data.preferredDate} ${data.preferredTime}" class="admin-select"></p>
                                 <p><b>Место:</b><br><input type="text" id="srv-loc-${docSnap.id}" value="${data.location}" class="admin-select"></p>
                                 <p><b>Изменить статус:</b><br>
                                 <select id="srv-status-${docSnap.id}" class="admin-select">
@@ -290,16 +228,15 @@
                             </div>
                         </div>
                         <div class="req-actions">
-                            <button class="admin-btn" onclick="prepareService('${docSnap.id}', '${data.language || 'lt'}', '${data.email}', '${data.clientName}', '${data.serviceName}')">Просмотреть и Отправить письмо</button>
-                            <button class="admin-btn-outline" onclick="saveOnly('service_requests', '${docSnap.id}', 'srv-')">Только Сохранить</button>
+                            <button class="admin-btn" onclick="prepareService('${docSnap.id}', '${data.language}', '${data.email}', '${data.clientName}', '${data.serviceName}')">Проверить и Отправить письмо</button>
+                            <button class="admin-btn-outline" onclick="saveOnly('service_requests', '${docSnap.id}', 'srv-')">Только сохранить</button>
                             <button class="admin-btn-delete" onclick="deleteDocRecord('service_requests', '${docSnap.id}')">Удалить</button>
                         </div>
                     `;
                     list.appendChild(reqDiv);
                 });
             }, (error) => {
-                console.error("Ошибка при получении Услуг:", error);
-                document.getElementById('services-list').innerHTML = `<p style="color: red;">Ошибка загрузки данных: ${error.message}</p>`;
+                document.getElementById('services-list').innerHTML = `<p style="color:red;">Ошибка доступа: ${error.message}</p>`;
             });
         }
 
@@ -342,7 +279,7 @@
                 } else {
                     await updateDoc(doc(db, collectionName, id), { status: newStatus, preferredDate: newDate, location: newLoc });
                 }
-                alert("Успешно сохранено (без отправки письма)!");
+                alert("Сохранено успешно (без отправки письма)!");
             } catch(e) { console.error(e); alert("Ошибка при сохранении."); }
         };
 
@@ -383,12 +320,12 @@
                 alert("Ошибка при отправке.");
             } finally {
                 btn.disabled = false;
-                btn.innerText = 'Подтвердить и Отправить';
+                btn.innerText = 'Сохранить и Отправить';
             }
         });
 
         window.deleteDocRecord = async (collectionName, id) => {
-            if (confirm("Вы уверены, что хотите удалить эту заявку?")) {
+            if (confirm("Вы уверены, что хотите удалить эту заявку? Это действие нельзя отменить.")) {
                 try { await deleteDoc(doc(db, collectionName, id)); } 
                 catch(e) { console.error(e); alert("Ошибка при удалении."); }
             }
